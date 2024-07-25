@@ -1,30 +1,6 @@
-# \file
-## \ingroup tutorial_roofit
-## \notebook
-## Use Simulation Based Inference (SBI) in RooFit
-##
-## This tutorial shows how to use SBI in ROOT. As reference distribution we
-## choose a simple uniform distribution. The target distribution is chosen to
-## be gaussian with different mean values. 
-## The classifier is trained to discriminate between the reference and target 
-## distribution. 
-## We see how the neural networks generalize to unknown mean values.
-##
-##
-## \macro_code
-## \macro_output
-##
-## \date July 2024
-## \author Robin Syring
-
-
-
 import ROOT
 import numpy as np
 from sklearn.neural_network import MLPClassifier
-import matplotlib.pyplot as plt
-
-from scipy.stats import gaussian_kde 
 
 # The samples used for training the classifier in this tutorial
 n_samples = 1000
@@ -134,7 +110,7 @@ class SBI:
 n_samples_train = n_samples
 
 # The "observed" data 
-mu_observed = 1.
+mu_observed = 2.
 
 # define the "observed" data
 x_var = ROOT.RooRealVar("x", "x", -12, 12)
@@ -143,7 +119,6 @@ sigma_var = ROOT.RooRealVar("sigma", "sigma", 1.5, 0.1, 10)
 gauss = ROOT.RooGaussian("gauss", "gauss", x_var, mu_var, sigma_var)
 uniform = ROOT.RooUniform("uniform", "uniform", x_var)
 obs_data = gauss.generate(x_var, n_samples)
-obs_data_u = uniform.generate(x_var, n_samples)
 
 # using a workspace for easier processing inside the class
 workspace = ROOT.RooWorkspace()
@@ -160,11 +135,9 @@ model.preprocessing()
 model.train_classifier()
 sbi_model = model
 
-
 # compute the likelihood ratio of the classifier for analysis purposes
 def compute_likelihood_ratio(x, mu):
     data_point = np.array([[x, mu]])
-    print(data_point)
     prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
     return 1 - prob[0]
 
@@ -174,105 +147,74 @@ def compute_likelihood_sum(mu):
     mu_arr = np.repeat(mu, obs_data.numEntries()).reshape(-1, 1)
     data_point = np.concatenate([obs_data.to_numpy()["x"].reshape(-1, 1), mu_arr], axis=1)
     prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
-    return -np.sum(np.log((1-prob)/prob))
-
-
+    return -np.sum(np.log(1 - prob))
 
 
 # compute the likelihood ratio
-nll_ratio = make_likelihood("MyLlh", "My Llh", compute_likelihood_ratio, ROOT.RooArgList(x_var, mu_var))
+nl_ratio = make_likelihood("MyLlh", "My Llh", compute_likelihood_ratio, ROOT.RooArgList(x_var, mu_var))
 
 # compute the real likelihood ration
 real_ratio = ROOT.RooFormulaVar("real_ratio", "x[0] / (x[0] + x[1])", [gauss, uniform])
 
+# Create NLL functions for Gaussian and Uniform models
+nll_gauss = gauss.createNLL(obs_data)
+nll_uniform = uniform.createNLL(obs_data)
 
-# compute the summed logarithmic likelihood
+
+
+# Create the RooPyLikelihood object for the NLL ratio
+# Use RooFormulaVar to create the ratio of the NLLs
+
+nll_ratio = ROOT.RooFormulaVar("nll_ratio", "nll_ratio", "x[1]-x[0]", ROOT.RooArgList(nll_gauss, nll_uniform))
+print(nll_gauss.getVal())
+print(nll_uniform.getVal())
+print(nll_ratio.getVal())
+
+# Compute the summed logarithmic likelihood for the learned classifier
+def compute_likelihood_sum(mu):
+    mu_arr = np.repeat(mu, obs_data.numEntries()).reshape(-1, 1)
+    data_point = np.concatenate([obs_data.to_numpy()["x"].reshape(-1, 1), mu_arr], axis=1)
+    prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
+    return np.sum(np.log(prob/(1-prob)))
+
+# Create the RooPyLikelihood object for the summed logarithmic likelihood
 nll_learned = make_likelihood("MyLlh", "My Llh", compute_likelihood_sum, ROOT.RooArgList(mu_var))
 
-# Create likelihood function
-nll_ref = gauss.createNLL(obs_data)
-
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.stats import norm, uniform
-
-# Define the constants
-sigma = 1  # standard deviation for the Gaussian distribution
-a, b = -10, 10  # lower and upper bounds for the Uniform distribution
-x = 2  # the value at which to evaluate the PDFs
-
-# Define a range of mean values for the Gaussian distribution
-mean_values = np.linspace(-5, 5, 100)
-
-# calculate negative log ratio
-def calc_neg_log_ratio(self, x, mu_observed):
-    preds = []
-    for mu in self.mu_vals:
-        sample = np.array([[x, mu]])
-        pred = self.classifier.predict_proba(sample)[:, 0]
-        preds.append(-np.log(pred))
-    return preds
-
-
-# Calculate the negative log ratio for each mean value
-neg_log_ratios = []
-neg_log_ratio_learned = []
-
-for mus in mean_values:
-    gaussian_pdf = norm.pdf(x, loc=mus, scale=sigma)
-    uniform_pdf = uniform.pdf(x, loc=a, scale=(b-a))
-    ratio = gaussian_pdf / uniform_pdf
-    neg_log_ratio = -np.log(ratio)
-    neg_log_ratios.append(neg_log_ratio)
-    neg_log_ratio_learned.append(compute_likelihood_sum(mus))
-
-
-# Plot the results
-plt.figure(figsize=(10, 6))
-plt.plot(mean_values, neg_log_ratios-min(neg_log_ratios), label='Negative Log Ratio')
-# plt.plot(mean_values, neg_log_ratio_learned- min(neg_log_ratio_learned), label="LEarned")
-plt.xlabel('Mean (μ)')
-plt.ylabel('Negative Log Ratio')
-plt.title('Negative Log Ratio of Gaussian vs Uniform Distribution')
-plt.legend()
-plt.grid(True)
-plt.show()
-
-
-
-
 # Plot the logarithmic summed likelihood
-c1 =ROOT.TCanvas()
-frame = mu_var.frame(Title="Learned vs analytical summed logarithmic Likelihood") #Range=(mu_observed-0.1, mu_observed+0.1)
+c1 = ROOT.TCanvas()
+frame = mu_var.frame(Title="Learned vs analytical summed logarithmic Likelihood", Range=(mu_observed-5, mu_observed+5)) #Range=(mu_observed-0.1, mu_observed+0.1))
 # Set the y-axis range
 frame.SetMinimum(0)  # Replace y_min with your desired minimum value
 frame.SetMaximum(0.3)  # Replace y_max with your desired maximum value
-nll_ref.plotOn(frame, ShiftToZero=True)
-nll_learned.plotOn(frame, LineColor="r", ShiftToZero=True)
+nll_uniform.plotOn(frame, Name="uni")
+nll_ratio.plotOn(frame, LineColor='y',Name="ratio" )
+nll_gauss.plotOn(frame, ShiftToZero=True, LineColor='g', LineStyle='--', Name="gauss")
+nll_learned.plotOn(frame, LineColor="r", ShiftToZero=True, Name="learned")
 frame.Draw()
+# Create a legend and add entries
+legend = ROOT.TLegend(0.7, 0.7, 0.9, 0.9)  # Adjust coordinates as needed
+legend.AddEntry("uni", "Uniform", "l")
+legend.AddEntry("ratio", "nll_u-nll_g", "l")
+legend.AddEntry("gauss", "Gaussian", "l")
+legend.AddEntry("learned", "-sum(log(prob/(1 - prob)))", "l")
+# Draw the frame and the legend
+
+legend.Draw()
 c1.SaveAs("Logarithmic_summed.png")
 
-
-
 # Plot the likelihood functions
-c2 =ROOT.TCanvas()
+c2 = ROOT.TCanvas()
 frame_x = x_var.frame(Title="Learned vs analytical likelihhood function")
-real_ratio.plotOn(frame_x, ShiftToZero=True )
-nll_ratio.plotOn(frame_x, LineColor="r",)
+nl_ratio.plotOn(frame_x, LineColor="r",)
+real_ratio.plotOn(frame_x, )
 frame_x.Draw()
 c2.SaveAs("llh_function.png")
 
-
-# compute the minimum via minuit and display the results
-for i in [nll_ref, nll_learned]:
+# Compute the minimum via minuit and display the results
+for i in [nll_gauss, nll_learned]:
     min = minimizer = ROOT.RooMinimizer(i)
     minimizer.setErrorLevel(0.5)    # adjust the error level in the minimization to work with likelihoods
     minimizer.setPrintLevel(-1)
     minimizer.minimize("Minuit2")
     result = minimizer.save()
     result.Print()
-
-
-
