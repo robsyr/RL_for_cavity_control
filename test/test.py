@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.neural_network import MLPClassifier
 
 # The samples used for training the classifier in this tutorial
-n_samples = 1000
+n_samples = 10000
 
 # different mean values used for training the classifier
 mu_vals = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
@@ -98,7 +98,7 @@ class SBI:
         thetas_reference = np.repeat(self.mu_vals, repeats_reference).reshape(-1, 1)
         thetas = np.concatenate((thetas_model, thetas_reference), axis=0)
         X = np.concatenate([self.data_model, self.data_ref])
-        self.y_train = np.concatenate([np.zeros(len(self.data_model)), np.ones(len(self.data_ref))])
+        self.y_train = np.concatenate([np.ones(len(self.data_model)), np.zeros(len(self.data_ref))])
         self.X_train = np.concatenate([X, thetas], axis=1)
 
     # train the classifier
@@ -139,7 +139,7 @@ sbi_model = model
 def compute_likelihood_ratio(x, mu):
     data_point = np.array([[x, mu]])
     prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
-    return 1 - prob[0]
+    return prob[0]
 
 # compute the negative logarithmic likelihood ratio summed
 # the function depends just on one variable, the mean value mu
@@ -147,7 +147,7 @@ def compute_likelihood_sum(mu):
     mu_arr = np.repeat(mu, obs_data.numEntries()).reshape(-1, 1)
     data_point = np.concatenate([obs_data.to_numpy()["x"].reshape(-1, 1), mu_arr], axis=1)
     prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
-    return -np.sum(np.log(1 - prob))
+    return np.sum(np.log((1 - prob)/prob))
 
 
 # compute the likelihood ratio
@@ -170,12 +170,7 @@ print(nll_gauss.getVal())
 print(nll_uniform.getVal())
 print(nll_ratio.getVal())
 
-# Compute the summed logarithmic likelihood for the learned classifier
-def compute_likelihood_sum(mu):
-    mu_arr = np.repeat(mu, obs_data.numEntries()).reshape(-1, 1)
-    data_point = np.concatenate([obs_data.to_numpy()["x"].reshape(-1, 1), mu_arr], axis=1)
-    prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
-    return np.sum(np.log(prob/(1-prob)))
+
 
 # Create the RooPyLikelihood object for the summed logarithmic likelihood
 nll_learned = make_likelihood("MyLlh", "My Llh", compute_likelihood_sum, ROOT.RooArgList(mu_var))
@@ -196,7 +191,7 @@ legend = ROOT.TLegend(0.7, 0.7, 0.9, 0.9)  # Adjust coordinates as needed
 legend.AddEntry("uni", "Uniform", "l")
 legend.AddEntry("ratio", "nll_u-nll_g", "l")
 legend.AddEntry("gauss", "Gaussian", "l")
-legend.AddEntry("learned", "-sum(log(prob/(1 - prob)))", "l")
+legend.AddEntry("learned", "sum(log((1 - prob)/prob))", "l")
 # Draw the frame and the legend
 
 legend.Draw()
