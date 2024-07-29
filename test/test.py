@@ -110,7 +110,7 @@ class SBI:
 n_samples_train = n_samples
 
 # The "observed" data 
-mu_observed = 2.
+mu_observed = 4.
 
 # define the "observed" data
 x_var = ROOT.RooRealVar("x", "x", -12, 12)
@@ -177,10 +177,8 @@ nll_learned = make_likelihood("MyLlh", "My Llh", compute_likelihood_sum, ROOT.Ro
 
 # Plot the logarithmic summed likelihood
 c1 = ROOT.TCanvas()
-frame = mu_var.frame(Title="Learned vs analytical summed logarithmic Likelihood", Range=(mu_observed-5, mu_observed+5)) #Range=(mu_observed-0.1, mu_observed+0.1))
-# Set the y-axis range
-frame.SetMinimum(0)  # Replace y_min with your desired minimum value
-frame.SetMaximum(0.3)  # Replace y_max with your desired maximum value
+frame = mu_var.frame(Title="Learned vs analytical summed logarithmic Likelihood", Range=(mu_observed-5, mu_observed+5)) 
+
 nll_uniform.plotOn(frame, Name="uni")
 nll_ratio.plotOn(frame, LineColor='y',Name="ratio" )
 nll_gauss.plotOn(frame, ShiftToZero=True, LineColor='g', LineStyle='--', Name="gauss")
@@ -192,17 +190,20 @@ legend.AddEntry("uni", "Uniform", "l")
 legend.AddEntry("ratio", "nll_u-nll_g", "l")
 legend.AddEntry("gauss", "Gaussian", "l")
 legend.AddEntry("learned", "sum(log((1 - prob)/prob))", "l")
-# Draw the frame and the legend
-
 legend.Draw()
 c1.SaveAs("Logarithmic_summed.png")
 
 # Plot the likelihood functions
 c2 = ROOT.TCanvas()
 frame_x = x_var.frame(Title="Learned vs analytical likelihhood function")
-nl_ratio.plotOn(frame_x, LineColor="r",)
-real_ratio.plotOn(frame_x, )
+nl_ratio.plotOn(frame_x, LineColor="r", Name="learned")
+real_ratio.plotOn(frame_x, Name="exact" )
 frame_x.Draw()
+# Create a legend and add entries
+legend = ROOT.TLegend(0.7, 0.7, 0.9, 0.9)  # Adjust coordinates as needed
+legend.AddEntry("learned", "learned", "l")
+legend.AddEntry("exact", "exact", "l")
+legend.Draw()
 c2.SaveAs("llh_function.png")
 
 # Compute the minimum via minuit and display the results
