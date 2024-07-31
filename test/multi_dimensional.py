@@ -6,6 +6,32 @@ import matplotlib.pyplot as plt
 # The samples used for training the classifier in this tutorial / rescale for more accuracy
 n_samples = 1000
 
+ROOT.gInterpreter.Declare("""
+class RooPyLikelihood : public RooAbsReal {
+public:
+   RooPyLikelihood(const char *name, const char *title, RooArgList &varlist)
+      : RooAbsReal(name, title), m_varlist("!varlist", "All variables(list)", this)
+   {
+      m_varlist.add(varlist);
+   }
+   // copy constructor
+   RooPyLikelihood(const RooPyLikelihood &right, const char *name = nullptr)
+      : RooAbsReal(right, name), m_varlist("!varlist", this, right.m_varlist)
+   {
+   }
+   // virtual destructor
+   virtual ~RooPyLikelihood() {}
+   // clone method
+   RooPyLikelihood *clone(const char *name) const override { return new RooPyLikelihood(*this, name); }
+   // the actual evaluation of function (will be redefined in Python!)
+   Double_t evaluate() const override { return 1; }
+   // getter for varlist
+   const RooArgList &varlist() const { return m_varlist; }
+protected:
+   RooListProxy m_varlist; // all variables as list of variables
+};
+""")
+
 # Overwriting the cpp function RooPyLikelihood
 def make_likelihood(name, title, func, variables):
     class MyLlh(ROOT.RooPyLikelihood):
@@ -74,13 +100,13 @@ class SBI:
 
 
 # Number of variables (dimensions)
-n_vars = 3
+n_vars = 2
 
 # Setting the training and toy data samples 
 n_samples_train = n_samples * 9
 
 # The "observed" data
-mu_observed = [1.5, -1.0, 2.0]
+mu_observed = [1.5, 1.0]
 
 # Define the "observed" data
 x_vars = [ROOT.RooRealVar(f"x{i}", f"x{i}", -12, 12) for i in range(n_vars)]
@@ -88,6 +114,8 @@ mu_vars = [ROOT.RooRealVar(f"mu{i}", f"mu{i}", mu_observed[i], -4, 4) for i in r
 sigma_vars = [ROOT.RooRealVar(f"sigma{i}", f"sigma{i}", 1.5, 0.1, 10) for i in range(n_vars)]
 gaussians = [ROOT.RooGaussian(f"gauss{i}", f"gauss{i}", x_vars[i], mu_vars[i], sigma_vars[i]) for i in range(n_vars)]
 uniforms = [ROOT.RooUniform(f"uniform{i}", f"uniform{i}", x_vars[i]) for i in range(n_vars)]
+
+
 
 # Create RooProdPdf for multi-dimensional Gaussian and Uniform distributions
 gauss = ROOT.RooProdPdf("gauss", "gauss", ROOT.RooArgList(*gaussians))
@@ -111,20 +139,18 @@ model.train_classifier()
 sbi_model = model
 
 
-#TODO until here everything is good
-
 # Compute the likelihood ratio of the classifier for analysis purposes
-def compute_likelihood_ratio(*x, mu_vals):
-    print("x:", x)
-    print("mu_vals:", mu_vals)
+def compute_likelihood_ratio(*args):
+    x_vals = args[:n_vars]
+    mu_vals = args[n_vars:]
     
     # Concatenate x and mu_vals into a single data point
-    data_point = np.array([list(x) + list(mu_vals)])
-    print("data_point:", data_point)
+    data_point = np.array(list(x_vals) + list(mu_vals)).reshape(1, -1)
+    print("data_point:", data_point[0], data_point)
     
     # Get probability of the data point being from the target distribution
     prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
-    print("prob:", prob)
+    print(prob[0])
     
     return prob[0]
 
@@ -132,13 +158,20 @@ def compute_likelihood_ratio(*x, mu_vals):
 # Compute the negative logarithmic likelihood ratio summed
 def compute_log_likelihood_sum(mu_vals):
     mu_arr = np.tile(mu_vals, (obs_data.numEntries(), 1))
-    data_points = np.hstack([obs_data.to_numpy()[[x.GetName() for x in x_vars]], mu_arr])
-    print(data_points)
+    data_points = np.hstack([obs_data.to_numpy()[:, [x.GetName() for x in x_vars]], mu_arr])
     prob = sbi_model.classifier.predict_proba(data_points)[:, 1]
-    return np.sum(np.log((1 - prob)/prob))
+    return np.sum(np.log((1 - prob) / prob))
+
+# Create combined variable list
+combined_vars = ROOT.RooArgList()
+for x in x_vars:
+    combined_vars.add(x)
+    print ('xs',x)
+for mu in mu_vars:
+    combined_vars.add(mu)
 
 # Compute the likelihood ratio
-llhr_learned = make_likelihood("MyLlh", "My Llh", lambda *x: compute_likelihood_ratio(*x[:-n_vars], mu_vals=x[-n_vars:]), ROOT.RooArgList(*(x_vars + mu_vars)))
+llhr_learned = make_likelihood("MyLlh", "My Llh", compute_likelihood_ratio, combined_vars)
 
 # Compute the real likelihood ratio
 llhr_calc = ROOT.RooFormulaVar("llhr_calc", "x[0] / (x[0] + x[1])", ROOT.RooArgList(gauss, uniform))
@@ -152,6 +185,7 @@ nllr__calc = ROOT.RooFormulaVar("nllr__calc", "nllr__calc", "x[1]-x[0]", ROOT.Ro
 
 # Compute the "learned" negative log likelihood ratio
 nllr_learned = make_likelihood("MyLlh", "My Llh", lambda *x: compute_log_likelihood_sum(x[-n_vars:]), ROOT.RooArgList(*mu_vars))
+
 
 """
 # Plot the negative logarithmic summed likelihood
@@ -187,7 +221,8 @@ legend.Draw()
 c2.SaveAs("llh_function_multidim.png")
 
 # Compute the minimum via minuit and display the results
-for i in [nll_gauss, nllr_learned]:
+for i in [nll_gauss, llhr_learned]: #, nllr_learned]:
+
     min = minimizer = ROOT.RooMinimizer(i)
     minimizer.setErrorLevel(0.5)
     minimizer.setPrintLevel(-1)
