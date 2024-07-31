@@ -229,3 +229,26 @@ for i in [nll_gauss, llhr_learned]: #, nllr_learned]:
     minimizer.minimize("Minuit2")
     result = minimizer.save()
     result.Print()
+
+
+
+
+# Compute the negative logarithmic likelihood ratio summed
+def compute_log_likelihood_sum(mu_vals):
+    # Convert obs_data to a numpy array if not already
+    obs_data_np = obs_data.to_numpy()
+
+    # Extract 'x' values from obs_data
+    x_data = np.array([obs_data_np[x.GetName()] for x in x_vars]).T
+
+    # Repeat mu_vals for each observation
+    mu_arr = np.tile(mu_vals, (obs_data.numEntries(), 1))
+
+    # Concatenate x and mu values
+    data_points = np.hstack([x_data, mu_arr])
+
+    # Predict probabilities
+    prob = sbi_model.classifier.predict_proba(data_points)[:, 1]
+
+    # Compute the negative logarithmic likelihood ratio summed
+    return np.sum(np.log((1 - prob) / prob))
