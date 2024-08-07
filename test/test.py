@@ -2,13 +2,14 @@ import ROOT
 import numpy as np
 from sklearn.neural_network import MLPClassifier
 
-# The samples used for training the classifier in this tutorial
+# The samples used for training the classifier in this tutorial / rescale for more accuracy
 n_samples = 10000
 
 # different mean values used for training the classifier
-mu_vals = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
+mu_vals = [-4,   0,   4]
 
-# defining a cpp wrapper 
+
+
 ROOT.gInterpreter.Declare("""
 class RooPyLikelihood : public RooAbsReal {
 public:
@@ -36,7 +37,7 @@ protected:
 """)
 
 
-# Overwriting the cpp function
+# Overwriting the cpp function RooPyLikelihood
 def make_likelihood(name, title, func, variables):
     class MyLlh(ROOT.RooPyLikelihood):
         def __init__(self, name, title, variables):
@@ -55,7 +56,6 @@ def make_likelihood(name, title, func, variables):
 
 # class used in this case to demonstate the use of SBI in Root
 class SBI:
-
     # initializing the class SBI
     def __init__(self, workspace):
         # Choose the hyperparameters for training the neural network
@@ -110,16 +110,22 @@ class SBI:
 n_samples_train = n_samples
 
 # The "observed" data 
-mu_observed = 4.
+mu_observed = 2
 
 # define the "observed" data
 x_var = ROOT.RooRealVar("x", "x", -12, 12)
 mu_var = ROOT.RooRealVar("mu", "mu", mu_observed, -12, 12)
 sigma_var = ROOT.RooRealVar("sigma", "sigma", 1.5, 0.1, 10)
-gauss = ROOT.RooGaussian("gauss", "gauss", x_var, mu_var, sigma_var)
+muss = [ROOT.RooRealVar("mu", "mu", i, -12, 12) for i in mu_vals]
+gauss = [ROOT.RooGaussian("gauss", "gauss", x_var, i, sigma_var) for i in muss]
 uniform = ROOT.RooUniform("uniform", "uniform", x_var)
-obs_data = gauss.generate(x_var, n_samples)
+gauss_observed = ROOT.RooGaussian("gauss", "gauss", x_var, mu_var, sigma_var)
+obs_data = gauss_observed.generate(x_var, n_samples)
 
+
+
+samples_gauss = [gauss[i].generate(x_var, n_samples) for i in range(len(mu_vals))]
+print(type(samples_gauss[0]))
 # using a workspace for easier processing inside the class
 workspace = ROOT.RooWorkspace()
 workspace.Import(gauss)
@@ -143,7 +149,7 @@ def compute_likelihood_ratio(x, mu):
 
 # compute the negative logarithmic likelihood ratio summed
 # the function depends just on one variable, the mean value mu
-def compute_likelihood_sum(mu):
+def compute_log_likelihood_sum(mu):
     mu_arr = np.repeat(mu, obs_data.numEntries()).reshape(-1, 1)
     data_point = np.concatenate([obs_data.to_numpy()["x"].reshape(-1, 1), mu_arr], axis=1)
     prob = sbi_model.classifier.predict_proba(data_point)[:, 1]
@@ -151,38 +157,30 @@ def compute_likelihood_sum(mu):
 
 
 # compute the likelihood ratio
-nl_ratio = make_likelihood("MyLlh", "My Llh", compute_likelihood_ratio, ROOT.RooArgList(x_var, mu_var))
+llhr_learned = make_likelihood("MyLlh", "My Llh", compute_likelihood_ratio, ROOT.RooArgList(x_var, mu_var))
 
 # compute the real likelihood ration
-real_ratio = ROOT.RooFormulaVar("real_ratio", "x[0] / (x[0] + x[1])", [gauss, uniform])
+llhr_calc = []
+for gaus in gauss:
+    llhr_calc.append(ROOT.RooFormulaVar("llhr_calc", "x[0] / (x[0] + x[1])", [gaus, uniform]))
+print(llhr_calc)
 
-# Create NLL functions for Gaussian and Uniform models
-nll_gauss = gauss.createNLL(obs_data)
+# Create negativ log likelihood functions for Gaussian and Uniform models
+nll_gauss = gauss_observed.createNLL(obs_data)
 nll_uniform = uniform.createNLL(obs_data)
 
+# compute the "real" negative log likelihood 
+nllr__calc = ROOT.RooFormulaVar("nllr__calc", "nllr__calc", "x[1]-x[0]", ROOT.RooArgList(nll_gauss, nll_uniform))
 
+# compute the "learned" negative log likelihood ratio
+nllr_learned = make_likelihood("MyLlh", "My Llh", compute_log_likelihood_sum, ROOT.RooArgList(mu_var))
 
-# Create the RooPyLikelihood object for the NLL ratio
-# Use RooFormulaVar to create the ratio of the NLLs
-
-nll_ratio = ROOT.RooFormulaVar("nll_ratio", "nll_ratio", "x[1]-x[0]", ROOT.RooArgList(nll_gauss, nll_uniform))
-print(nll_gauss.getVal())
-print(nll_uniform.getVal())
-print(nll_ratio.getVal())
-
-
-
-# Create the RooPyLikelihood object for the summed logarithmic likelihood
-nll_learned = make_likelihood("MyLlh", "My Llh", compute_likelihood_sum, ROOT.RooArgList(mu_var))
-
-# Plot the logarithmic summed likelihood
+# Plot the negative logarithmic summed likelihood
 c1 = ROOT.TCanvas()
 frame = mu_var.frame(Title="Learned vs analytical summed logarithmic Likelihood", Range=(mu_observed-5, mu_observed+5)) 
-
 nll_uniform.plotOn(frame, Name="uni")
-nll_ratio.plotOn(frame, LineColor='y',Name="ratio" )
-nll_gauss.plotOn(frame, ShiftToZero=True, LineColor='g', LineStyle='--', Name="gauss")
-nll_learned.plotOn(frame, LineColor="r", ShiftToZero=True, Name="learned")
+nll_gauss.plotOn(frame, ShiftToZero=True, LineColor='g', LineStyle='--', Name="gauss") # ShiftToZero to compare it to the learned case
+nllr_learned.plotOn(frame, LineColor="r", ShiftToZero=True, Name="learned")
 frame.Draw()
 # Create a legend and add entries
 legend = ROOT.TLegend(0.7, 0.7, 0.9, 0.9)  # Adjust coordinates as needed
@@ -193,21 +191,38 @@ legend.AddEntry("learned", "sum(log((1 - prob)/prob))", "l")
 legend.Draw()
 c1.SaveAs("Logarithmic_summed.png")
 
+
 # Plot the likelihood functions
 c2 = ROOT.TCanvas()
-frame_x = x_var.frame(Title="Learned vs analytical likelihhood function")
-nl_ratio.plotOn(frame_x, LineColor="r", Name="learned")
-real_ratio.plotOn(frame_x, Name="exact" )
+frame_x = x_var.frame(Title="Extrapolation via SBI")
+frame_x.SetYTitle("Likelihood ratio")  # Add y-axis label
+llhr_learned.plotOn(frame_x, LineColor="r", Name="learned")
+
+# Define a list of colors and line styles
+colors = ['b', 'g',  'c', 'm', 'y', 'k']  # Extend this list with more colors if needed
+styles = ['--', '-.', ':']  # Different line styles
+
+for i in range(len(mu_vals)):
+    color = colors[i % len(colors)]  # Cycle through colors
+    style = styles[i % len(styles)]  # Cycle through styles
+    #llhr_calc[i].plotOn(frame_x, LineColor=color, LineStyle=style, Name=f"{mu_vals[i]}")
+    samples_gauss[i].plotOn(frame_x)
+
+
 frame_x.Draw()
 # Create a legend and add entries
+"""
 legend = ROOT.TLegend(0.7, 0.7, 0.9, 0.9)  # Adjust coordinates as needed
 legend.AddEntry("learned", "learned", "l")
-legend.AddEntry("exact", "exact", "l")
+for i in mu_vals:
+    legend.AddEntry(f"{i}",f"{i}", "l" )
 legend.Draw()
+"""
 c2.SaveAs("llh_function.png")
 
 # Compute the minimum via minuit and display the results
-for i in [nll_gauss, nll_learned]:
+for i in [nll_gauss, nllr_learned]:
+    print(type(nllr_learned))
     min = minimizer = ROOT.RooMinimizer(i)
     minimizer.setErrorLevel(0.5)    # adjust the error level in the minimization to work with likelihoods
     minimizer.setPrintLevel(-1)
