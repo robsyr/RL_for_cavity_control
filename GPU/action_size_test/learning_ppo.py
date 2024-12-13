@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO, SAC, DDPG, TD3, A2C
-from fabry_perot_pm import Environment
+from GPU.action_size_test.fabry_perot_pm import Environment
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 import time
