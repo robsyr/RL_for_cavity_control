@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scripts.Fabry_perot.calculate_output_powers import power_fabry_plotting
-from scripts.Fabry_perot.experimental_quantities import wavelength
+from Fabry_perot.calculate_output_powers import power_fabry_plotting
+from Fabry_perot.experimental_quantities import wavelength
 
 # # Generate x values for Fabry-Perot function
 x = np.linspace(-0.02 * wavelength, 0.02 * wavelength, 10000)
@@ -78,9 +78,6 @@ ax.set_xticklabels([])  # Remove tick labels
 # Save and show
 plt.savefig('/home/robin/Dokumente/Masterarbeit/MA/Images/Control_intuitive.png', bbox_inches='tight')
 plt.show()
-
-
-
 
 
 

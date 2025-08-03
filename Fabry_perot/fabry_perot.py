@@ -2,7 +2,7 @@ import gymnasium as gym
 import numpy as np
 from typing import Optional
 from calculate_output_powers import power_output_transmitted_fabry_perot
-from scripts.Fabry_perot.experimental_quantities import *
+from experimental_quantities import *
 
 
 class Environment(gym.Env):

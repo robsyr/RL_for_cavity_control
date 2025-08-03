@@ -1,5 +1,5 @@
 import numpy as np
-from scripts.Fabry_perot.experimental_quantities import *
+from experimental_quantities import *
 
 
 def power_output_transmitted_fabry_perot(delta_L):

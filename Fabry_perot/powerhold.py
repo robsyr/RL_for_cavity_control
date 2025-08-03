@@ -1,10 +1,11 @@
 import numpy as np
-from fabry_perot_pm import *
+from Fabry_perot.fabry_perot import *
 import os
 from stable_baselines3 import SAC
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from experimental_quantities import *
 
 # Define environments
 env1 = Environment(history_length=4, noise_level=4e-12, action_size=4e-11)

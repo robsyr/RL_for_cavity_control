@@ -1,8 +1,8 @@
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
-from scripts.Fabry_perot.experimental_quantities import *
-from scripts.Fabry_perot.calculate_output_powers import power_fabry_plotting
+from Fabry_perot.experimental_quantities import *
+from Fabry_perot.calculate_output_powers import power_fabry_plotting
 
 def PPO_clipped(x, epsilon):
 
@@ -86,5 +86,3 @@ def power_transmitted_fabry(spectral_range):
     )
 
 
-# Example usage
-power_transmitted_fabry(1)  # Adjust spectral range if needed
