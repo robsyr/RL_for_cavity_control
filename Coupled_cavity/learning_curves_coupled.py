@@ -6,7 +6,7 @@ import seaborn as sns
 import os
 import glob
 
-base_path = os.path.expanduser("~/scripts/logs_coupled_L/logs_tm_")
+base_path = os.path.expanduser("~/Plotting/logs_coupled/logs_tm_")
 
 np.set_printoptions(suppress=True)
 
@@ -106,8 +106,7 @@ class PlotLearningCurves:
         plt.grid()
         plt.tight_layout()
 
-        # Save in ~/scripts/
-        output_dir = os.path.expanduser("~/scripts")
+        output_dir = os.path.expanduser("~/Plotting/")
         os.makedirs(output_dir, exist_ok=True)
         filename = f"learning_curve_tm_comparison_len{self.length}_noise{self.noise}_size{self.size}.png"
         output_path = os.path.join(output_dir, filename)
